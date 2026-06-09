@@ -96,7 +96,7 @@ class ActionService {
     }
   }
 
-  Future<Map<String, dynamic>> processPrompt(String userPrompt) async {
+  Future<List<Map<String, dynamic>>> processPrompt(String userPrompt) async {
     if (!_isInitialized || !_isModelReady) {
       throw Exception('Modelo no cargado. Por favor selecciona un modelo.');
     }
@@ -120,13 +120,44 @@ class ActionService {
       print('📝 Respuesta del modelo: $generatedText');
 
       final jsonString = _extractJson(generatedText);
-      final actionData = jsonDecode(jsonString) as Map<String, dynamic>;
+      final jsonData = jsonDecode(jsonString);
 
-      return actionData;
+      // Soportar tanto respuesta única como múltiples acciones
+      List<Map<String, dynamic>> actions = [];
+
+      if (jsonData is Map && jsonData.containsKey('actions')) {
+        // Formato con múltiples acciones
+        final actionsList = jsonData['actions'] as List;
+        actions = actionsList.cast<Map<String, dynamic>>();
+      } else if (jsonData is Map && jsonData.containsKey('action')) {
+        // Formato con acción única (compatibilidad hacia atrás)
+        actions = [jsonData as Map<String, dynamic>];
+      } else {
+        throw Exception('Formato de respuesta inválido');
+      }
+
+      return actions;
     } catch (e) {
       print('❌ Error al procesar prompt: $e');
       rethrow;
     }
+  }
+
+  Future<Map<String, dynamic>> executeActions(List<Map<String, dynamic>> actions) async {
+    final results = <String, dynamic>{};
+
+    for (int i = 0; i < actions.length; i++) {
+      try {
+        print('⚙️ Ejecutando acción ${i + 1}/${actions.length}');
+        final result = await executeAction(actions[i]);
+        results['action_${i + 1}'] = result;
+      } catch (e) {
+        print('❌ Error en acción ${i + 1}: $e');
+        results['action_${i + 1}_error'] = e.toString();
+      }
+    }
+
+    return results;
   }
 
   Future<Map<String, dynamic>> executeAction(Map<String, dynamic> actionData) async {
@@ -195,6 +226,8 @@ class ActionService {
   String _buildSystemPrompt() {
     return '''You are an intelligent assistant that converts natural language requests into structured JSON actions.
 
+IMPORTANT: If the user requests multiple actions in one request, return ALL of them. For example, "list products and clients" should return BOTH list_products AND list_clients actions.
+
 AVAILABLE ACTIONS:
 - create_sale: Create a new sale
 - list_sales: List all sales
@@ -210,13 +243,27 @@ AVAILABLE ACTIONS:
 - list_users: List all users
 
 RESPONSE FORMAT:
-Always respond with ONLY valid JSON in this exact format:
+For SINGLE action, respond with:
 {
   "action": "action_name",
   "data": {
     "field1": "value1",
     "field2": "value2"
   }
+}
+
+For MULTIPLE actions, respond with:
+{
+  "actions": [
+    {
+      "action": "action_name_1",
+      "data": { ... }
+    },
+    {
+      "action": "action_name_2",
+      "data": { ... }
+    }
+  ]
 }
 
 FIELD MAPPINGS:
@@ -251,7 +298,7 @@ For CREATE_USER:
 
 For LIST actions: Return empty data object.
 
-Always infer field values from the user request.''';
+Always infer field values from the user request. ALWAYS return valid JSON only, no other text.''';
   }
 
   String _extractJson(String text) {

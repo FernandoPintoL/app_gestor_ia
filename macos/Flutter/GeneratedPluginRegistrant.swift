@@ -5,10 +5,14 @@
 import FlutterMacOS
 import Foundation
 
+import ffmpeg_kit_flutter_new_min
 import file_picker
 import llamadart
+import record_macos
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
+  FFmpegKitFlutterPlugin.register(with: registry.registrar(forPlugin: "FFmpegKitFlutterPlugin"))
   FilePickerPlugin.register(with: registry.registrar(forPlugin: "FilePickerPlugin"))
   LlamadartPlugin.register(with: registry.registrar(forPlugin: "LlamadartPlugin"))
+  RecordMacOsPlugin.register(with: registry.registrar(forPlugin: "RecordMacOsPlugin"))
 }

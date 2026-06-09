@@ -45,6 +45,7 @@ class ApiService {
 
   bool get isAuthenticated => _token != null;
   String? get token => _token;
+  String? get userId => _userId;
 
   Future<dynamic> request(
     String method,
