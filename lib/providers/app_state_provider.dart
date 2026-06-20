@@ -33,11 +33,12 @@ class AppStateProvider extends ChangeNotifier {
 
       // Mostrar acciones detectadas
       for (int i = 0; i < actions.length; i++) {
-        _addLog('  ${i + 1}. ${actions[i]['action']}');
+        final actionName = actions[i]['action'] ?? 'unknown';
+        _addLog('  ${i + 1}. $actionName');
       }
 
       // Ejecutar todas las acciones
-      _addLog('🚀 Ejecutando acciones...');
+      _addLog('🚀 Ejecutando secuencia de acciones...');
       final result = await _actionService.executeActions(actions);
 
       _result = result;

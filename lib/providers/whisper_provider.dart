@@ -166,15 +166,27 @@ class WhisperProvider extends ChangeNotifier {
       _addLog('📊 Tamaño del archivo: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
 
       // Transcribir con WhisperController
-      _addLog('⏳ Iniciando transcripción...');
-      final result = await _whisperController.transcribe(
-        model: _selectedModel,
-        audioPath: finalPath,
-        lang: 'auto',
-      );
+      _addLog('⏳ Iniciando transcripción (esto puede tardar 10-30 segundos)...');
+      try {
+        final result = await _whisperController.transcribe(
+          model: _selectedModel,
+          audioPath: finalPath,
+          lang: 'auto',
+        ).timeout(
+          const Duration(minutes: 2),
+          onTimeout: () {
+            throw Exception('Timeout en transcripción (>2 minutos)');
+          },
+        );
 
-      // Extraer texto de la respuesta
-      _transcript = result!.transcription.text.trim();
+        // Extraer texto de la respuesta
+        _transcript = result!.transcription.text.trim();
+      } catch (e) {
+        if (e is TimeoutException) {
+          throw Exception('Transcripción tardó demasiado. Intenta con audio más corto.');
+        }
+        rethrow;
+      }
 
       if (_transcript!.isNotEmpty) {
         _addLog('✅ Transcripción completada: $_transcript');

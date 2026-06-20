@@ -75,6 +75,9 @@ class ApiService {
         case 'PUT':
           response = await http.put(url, headers: headers, body: jsonEncode(body));
           break;
+        case 'PATCH':
+          response = await http.patch(url, headers: headers, body: jsonEncode(body));
+          break;
         case 'DELETE':
           response = await http.delete(url, headers: headers);
           break;
@@ -157,4 +160,44 @@ class ApiService {
 
   Future<dynamic> createUser(Map<String, dynamic> data) =>
     request('POST', '/usuarios', body: data);
+
+  // Stock Management
+  Future<dynamic> updateProductStock({
+    required int productId,
+    required int quantity,
+    String type = 'increment',
+  }) async {
+    return request(
+      'PATCH',
+      '/productos/$productId/stock',
+      body: {
+        'quantity': quantity,
+        'type': type, // 'increment', 'decrement', or 'set'
+      },
+    );
+  }
+
+  Future<dynamic> updateProductStockByName(
+    String productName, {
+    required int quantity,
+    String type = 'increment',
+  }) async {
+    try {
+      // Primero buscar el producto por nombre
+      final products = await getProducts();
+      final product = products.firstWhere(
+        (p) => (p['name'] ?? p['nombre'])
+            .toString()
+            .toLowerCase()
+            .contains(productName.toLowerCase()),
+      );
+      return updateProductStock(
+        productId: product['id'],
+        quantity: quantity,
+        type: type,
+      );
+    } catch (e) {
+      throw Exception('Producto "$productName" no encontrado: $e');
+    }
+  }
 }
