@@ -3,9 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:whisper_ggml/whisper_ggml.dart';
 import '../providers/model_provider.dart';
-import '../providers/app_state_provider.dart';
 import '../providers/whisper_provider.dart';
-import '../providers/auth_provider.dart';
 import '../widgets/status_bar.dart';
 import '../widgets/prompt_section.dart';
 import '../widgets/result_section.dart';
@@ -151,7 +149,6 @@ class _GestorPageState extends State<GestorPage> {
                       ? 'Detener'
                       : 'Grabar',
                   style: const TextStyle(
-                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
                 ),

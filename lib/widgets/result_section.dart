@@ -23,7 +23,7 @@ class ResultSection extends StatelessWidget {
               children: [
                 const Text(
                   '✅ Resultado',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
                 Container(
@@ -39,7 +39,6 @@ class ResultSection extends StatelessWidget {
                         .convert(appState.result),
                     style: const TextStyle(
                       fontFamily: 'monospace',
-                      fontSize: 12,
                     ),
                   ),
                 ),

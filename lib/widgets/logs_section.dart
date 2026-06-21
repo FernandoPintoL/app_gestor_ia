@@ -24,7 +24,7 @@ class ConsolidatedLogsSection extends StatelessWidget {
               children: [
                 const Text(
                   '📋 Actividad',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Container(
@@ -39,7 +39,6 @@ class ConsolidatedLogsSection extends StatelessWidget {
                     child: SelectableText(
                       combinedLogs.trim(),
                       style: const TextStyle(
-                        fontSize: 10,
                         fontFamily: 'monospace',
                       ),
                     ),

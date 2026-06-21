@@ -80,14 +80,18 @@ class ActionService {
       await saveModelPath(finalPath);
 
       print('⏳ Cargando modelo con llamadart...');
+      final loadStopwatch = Stopwatch()..start();
       await _engine.loadModel(finalPath);
+      loadStopwatch.stop();
 
       _session = ChatSession(_engine);
       _isModelReady = true;
       _isInitialized = true;
       _currentModelPath = finalPath;
 
-      print('✅ Modelo cargado exitosamente');
+      print(
+        '✅ Modelo qwen2.5-1.5b-instruct-q4_k_m.gguf cargado en ${loadStopwatch.elapsedMilliseconds} ms',
+      );
     } catch (e) {
       print('❌ Error al cargar el modelo: $e');
       _isInitialized = false;
@@ -101,20 +105,32 @@ class ActionService {
       throw Exception('Modelo no cargado. Por favor selecciona un modelo.');
     }
 
+    final stopwatch = Stopwatch()..start();
+
     try {
-      final systemPrompt = _buildSystemPrompt();
       final response = StringBuffer();
 
       print('🔄 Procesando: "$userPrompt"');
 
-      await for (final chunk in _session.create([
-        LlamaTextContent('$systemPrompt\n\nUser: $userPrompt'),
-      ])) {
+      // Cada prompt es una conversión independiente: se descarta el
+      // historial previo para que el contexto no crezca en cada llamada.
+      _session.reset(keepSystemPrompt: false);
+      _session.systemPrompt = _buildSystemPrompt();
+
+      await for (final chunk in _session.create(
+        [LlamaTextContent(userPrompt)],
+        params: const GenerationParams(maxTokens: 400, temp: 0.2),
+      )) {
         final content = chunk.choices.first.delta.content;
         if (content != null) {
           response.write(content);
         }
       }
+
+      stopwatch.stop();
+      print(
+        '⏱️ Inferencia qwen2.5-1.5b-instruct-q4_k_m.gguf: ${stopwatch.elapsedMilliseconds} ms',
+      );
 
       final generatedText = response.toString();
       print('📝 Respuesta del modelo: $generatedText');
@@ -143,6 +159,7 @@ class ActionService {
 
       return actions;
     } catch (e) {
+      if (stopwatch.isRunning) stopwatch.stop();
       print('❌ Error al procesar prompt: $e');
       rethrow;
     }
@@ -150,20 +167,33 @@ class ActionService {
 
   Future<Map<String, dynamic>> executeActions(List<Map<String, dynamic>> actions) async {
     final results = <String, dynamic>{};
+    final totalStopwatch = Stopwatch()..start();
 
     for (int i = 0; i < actions.length; i++) {
+      final actionStopwatch = Stopwatch()..start();
       try {
         final actionName = actions[i]['action'] as String? ?? 'unknown';
         print('⚙️ Ejecutando acción ${i + 1}/${actions.length}: $actionName');
         final result = await executeAction(actions[i]);
-        print('✅ Acción ${i + 1} completada: $actionName');
+        actionStopwatch.stop();
+        print(
+          '✅ Acción ${i + 1} completada: $actionName (${actionStopwatch.elapsedMilliseconds} ms)',
+        );
         results['action_${i + 1}'] = result;
       } catch (e) {
+        actionStopwatch.stop();
         final actionName = actions[i]['action'] as String? ?? 'unknown';
-        print('❌ Error en acción ${i + 1} ($actionName): $e');
+        print(
+          '❌ Error en acción ${i + 1} ($actionName) tras ${actionStopwatch.elapsedMilliseconds} ms: $e',
+        );
         results['action_${i + 1}_error'] = e.toString();
       }
     }
+
+    totalStopwatch.stop();
+    print(
+      '⏱️ Tiempo total de ejecución de ${actions.length} acción(es): ${totalStopwatch.elapsedMilliseconds} ms',
+    );
 
     return results;
   }

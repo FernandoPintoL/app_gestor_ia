@@ -30,7 +30,6 @@ class PromptSection extends StatelessWidget {
                     const Text(
                       '📝 Escribe tu solicitud',
                       style: TextStyle(
-                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
