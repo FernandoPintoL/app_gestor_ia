@@ -138,7 +138,7 @@ class ActionService {
       final jsonString = _extractJson(generatedText);
       print('🔍 JSON extraído: $jsonString');
 
-      final jsonData = jsonDecode(jsonString);
+      final jsonData = _decodeJsonLenient(jsonString);
 
       // Soportar tanto respuesta única como múltiples acciones
       List<Map<String, dynamic>> actions = [];
@@ -555,6 +555,82 @@ RESPOND WITH JSON ONLY - NO EXPLANATIONS!''';
     }
 
     return text.substring(startIndex, endIndex + 1);
+  }
+
+  /// Intenta decodificar JSON de forma estricta y, si falla, aplica una
+  /// reparación de anidación de llaves/corchetes (error frecuente de modelos
+  /// pequeños al generar JSON con varias acciones) antes de reintentar.
+  dynamic _decodeJsonLenient(String jsonString) {
+    try {
+      return jsonDecode(jsonString);
+    } on FormatException {
+      final repaired = _repairJsonBrackets(jsonString);
+      print('⚠️ JSON malformado, aplicando reparación automática: $repaired');
+      return jsonDecode(repaired);
+    }
+  }
+
+  /// Corrige llaves/corchetes mal anidados o fuera de orden (ej: el modelo
+  /// olvida cerrar un objeto antes de cerrar el arreglo que lo contiene).
+  /// Recorre el texto con una pila de apertura; si un cierre no coincide con
+  /// el tope, inserta el cierre que falta; si un cierre no tiene nada que
+  /// cerrar, lo descarta. El contenido dentro de strings no se toca.
+  String _repairJsonBrackets(String text) {
+    const matchingOpen = {'}': '{', ']': '['};
+    const closingFor = {'{': '}', '[': ']'};
+
+    final buffer = StringBuffer();
+    final stack = <String>[];
+    bool inString = false;
+    bool escape = false;
+
+    for (int i = 0; i < text.length; i++) {
+      final ch = text[i];
+
+      if (inString) {
+        buffer.write(ch);
+        if (escape) {
+          escape = false;
+        } else if (ch == '\\') {
+          escape = true;
+        } else if (ch == '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch == '"') {
+        inString = true;
+        buffer.write(ch);
+        continue;
+      }
+
+      if (ch == '{' || ch == '[') {
+        stack.add(ch);
+        buffer.write(ch);
+        continue;
+      }
+
+      if (ch == '}' || ch == ']') {
+        while (stack.isNotEmpty && stack.last != matchingOpen[ch]) {
+          buffer.write(closingFor[stack.removeLast()]);
+        }
+        if (stack.isNotEmpty) {
+          stack.removeLast();
+          buffer.write(ch);
+        }
+        // Si la pila ya estaba vacía, es un cierre sobrante: se descarta.
+        continue;
+      }
+
+      buffer.write(ch);
+    }
+
+    while (stack.isNotEmpty) {
+      buffer.write(closingFor[stack.removeLast()]);
+    }
+
+    return buffer.toString();
   }
 
   void dispose() {

@@ -1,9 +1,14 @@
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
+  static const _storage = FlutterSecureStorage();
+  static const _tokenKey = 'auth_token';
+  static const _userIdKey = 'auth_user_id';
+
   late String baseUrl;
   String? _token;
   String? _userId;
@@ -29,10 +34,23 @@ class ApiService {
         }),
       );
 
+      print('📡 POST /auth/login → HTTP ${response.statusCode}: ${response.body}');
+
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final body = jsonDecode(response.body);
+        // El backend envuelve la respuesta en { success, data: { token, user, ... } }
+        final data = body is Map && body['data'] is Map ? body['data'] : body;
         _token = data['token'];
         _userId = data['user']?['id']?.toString();
+
+        if (_token == null) {
+          throw Exception('Login sin token en la respuesta: ${response.body}');
+        }
+
+        await _storage.write(key: _tokenKey, value: _token);
+        if (_userId != null) {
+          await _storage.write(key: _userIdKey, value: _userId);
+        }
         print('✅ Login exitoso');
       } else {
         throw Exception('Error de login: ${response.body}');
@@ -43,16 +61,72 @@ class ApiService {
     }
   }
 
+  Future<void> logout([String reason = 'manual']) async {
+    print('🔒 logout() llamado (motivo: $reason, token previo: ${_token != null ? "sí" : "no"})');
+    _token = null;
+    _userId = null;
+    await _storage.delete(key: _tokenKey);
+    await _storage.delete(key: _userIdKey);
+  }
+
   bool get isAuthenticated => _token != null;
   String? get token => _token;
   String? get userId => _userId;
+
+  /// Intenta recuperar una sesión previamente guardada en el dispositivo,
+  /// sin hacer ninguna llamada de red. Úsalo al arrancar la app para evitar
+  /// forzar un login (que revocaría sesiones activas en otros dispositivos)
+  /// cuando ya había una sesión válida guardada localmente.
+  Future<bool> tryRestoreSession() async {
+    if (isAuthenticated) return true;
+
+    final storedToken = await _storage.read(key: _tokenKey);
+    if (storedToken == null) return false;
+
+    _token = storedToken;
+    _userId = await _storage.read(key: _userIdKey);
+    print('🔑 Sesión restaurada desde almacenamiento seguro');
+    return true;
+  }
+
+  /// Garantiza que exista una sesión válida antes de una petición:
+  /// 1) si ya hay token en memoria, no hace nada.
+  /// 2) si no, intenta restaurar el token guardado en el dispositivo.
+  /// 3) si tampoco hay uno guardado, reloguea con las credenciales por defecto.
+  Future<bool> _ensureAuthenticated() async {
+    print('🔎 _ensureAuthenticated(): token en memoria=${_token != null}');
+    if (isAuthenticated) return true;
+
+    final storedToken = await _storage.read(key: _tokenKey);
+    print('🔎 _ensureAuthenticated(): token en storage=${storedToken != null}');
+    if (storedToken != null) {
+      _token = storedToken;
+      _userId = await _storage.read(key: _userIdKey);
+      print('🔑 Sesión restaurada desde almacenamiento seguro');
+      return true;
+    }
+
+    try {
+      final user = dotenv.env['DEFAULT_LOGIN_USER'] ?? 'admin';
+      final password = dotenv.env['DEFAULT_LOGIN_PASSWORD'] ?? 'Admin123!';
+      print('🔐 Sin sesión activa, reautenticando automáticamente...');
+      await login(user, password);
+      return isAuthenticated;
+    } catch (e) {
+      print('❌ Auto-login falló: $e');
+      return false;
+    }
+  }
 
   Future<dynamic> request(
     String method,
     String endpoint, {
     Map<String, dynamic>? body,
+    bool isRetry = false,
   }) async {
-    if (!isAuthenticated) {
+    final authenticated = await _ensureAuthenticated();
+    print('🔎 request($method $endpoint, isRetry=$isRetry): authenticated=$authenticated, token en memoria=${_token != null}');
+    if (!authenticated) {
       throw Exception('No autenticado');
     }
 
@@ -85,6 +159,8 @@ class ApiService {
           throw Exception('Método HTTP no soportado: $method');
       }
 
+      print('📡 $method $endpoint → HTTP ${response.statusCode}: ${response.body}');
+
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body);
         // Si es un Map, devolverlo; si es un List, envolverlo en un Map
@@ -95,6 +171,12 @@ class ApiService {
         }
         return data;
       } else if (response.statusCode == 401) {
+        // Token expirado/revocado (ej: login desde otro dispositivo).
+        // Se limpia y se reintenta una sola vez con una sesión nueva.
+        await logout();
+        if (!isRetry) {
+          return request(method, endpoint, body: body, isRetry: true);
+        }
         throw Exception('No autorizado');
       } else {
         throw Exception('Error ${response.statusCode}: ${response.body}');

@@ -36,7 +36,21 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  void logout() {
+  /// Intenta recuperar una sesión guardada en el dispositivo sin red.
+  /// Devuelve true si había una sesión válida y quedó restaurada.
+  Future<bool> tryRestoreSession() async {
+    final restored = await _apiService.tryRestoreSession();
+    if (restored) {
+      _isAuthenticated = true;
+      _token = _apiService.token;
+      _userId = _apiService.userId;
+      notifyListeners();
+    }
+    return restored;
+  }
+
+  Future<void> logout() async {
+    await _apiService.logout();
     _isAuthenticated = false;
     _userId = null;
     _token = null;

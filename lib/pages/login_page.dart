@@ -21,11 +21,16 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _attemptAutoLogin() async {
     final authProvider = context.read<AuthProvider>();
     try {
-      final user = dotenv.env['DEFAULT_LOGIN_USER'] ?? 'admin';
-      final password = dotenv.env['DEFAULT_LOGIN_PASSWORD'] ?? 'Admin123!';
+      // Si ya había una sesión guardada en el dispositivo, se reusa sin red
+      // (evita revocar la sesión activa en otro dispositivo innecesariamente).
+      final restored = await authProvider.tryRestoreSession();
+      if (!restored) {
+        final user = dotenv.env['DEFAULT_LOGIN_USER'] ?? 'admin';
+        final password = dotenv.env['DEFAULT_LOGIN_PASSWORD'] ?? 'Admin123!';
 
-      print('🔐 Intentando login con usuario: $user');
-      await authProvider.login(user, password);
+        print('🔐 Intentando login con usuario: $user');
+        await authProvider.login(user, password);
+      }
 
       if (mounted) {
         Navigator.of(context).pushReplacement(
