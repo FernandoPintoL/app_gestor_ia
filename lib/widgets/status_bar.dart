@@ -19,7 +19,7 @@ class CompactStatusBar extends StatelessWidget {
     return Consumer3<ModelProvider, WhisperProvider, AuthProvider>(
       builder: (context, modelProvider, whisper, auth, _) {
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 2),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -69,7 +69,9 @@ class CompactStatusBar extends StatelessWidget {
               Tooltip(
                 message: whisper.isModelReady
                     ? 'Whisper cargado'
-                    : 'Whisper cargando...',
+                    : whisper.isTranscribing
+                        ? 'Whisper cargando...'
+                        : 'Whisper no cargado (toca el micrófono)',
                 child: IconButton(
                   onPressed: null,
                   icon: Icon(

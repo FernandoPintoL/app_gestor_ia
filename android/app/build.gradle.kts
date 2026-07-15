@@ -32,6 +32,20 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    // whisper_ggml calls into ffmpeg_kit_flutter_new_min (an fork of the now
+    // archived/unmaintained arthenica/ffmpeg-kit) on every transcription.
+    // Its prebuilt libffmpegkit_abidetect.so crashes on some Samsung devices
+    // in release builds with "Bad JNI version returned from JNI_OnLoad" when
+    // loaded via AGP's modern (uncompressed, mmap-from-APK) native lib
+    // packaging. Forcing legacy packaging (compressed, extracted at install
+    // time) is the standard workaround for this class of OEM-specific native
+    // loading bug.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 kotlin {

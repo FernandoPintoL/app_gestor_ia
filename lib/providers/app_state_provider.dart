@@ -1,68 +1,61 @@
 import 'package:flutter/material.dart';
+import '../models/chat_message.dart';
 import '../services/action_service.dart';
 
 class AppStateProvider extends ChangeNotifier {
   final ActionService _actionService = ActionService();
 
-  bool _isProcessing = false;
-  Map<String, dynamic>? _result;
-  String _logs = '';
+  final List<ChatMessage> _messages = [];
 
-  bool get isProcessing => _isProcessing;
-  Map<String, dynamic>? get result => _result;
-  String get logs => _logs;
+  List<ChatMessage> get messages => List.unmodifiable(_messages);
+
+  bool get isProcessing =>
+      _messages.isNotEmpty && _messages.last.status == MessageStatus.pending;
 
   Future<void> processPrompt(String prompt) async {
-    if (prompt.isEmpty) {
-      _addLog('❌ Escribe un prompt');
-      notifyListeners();
-      return;
-    }
+    if (prompt.trim().isEmpty || isProcessing) return;
 
-    _isProcessing = true;
-    _result = null;
-    _logs = '';
+    _messages.add(ChatMessage.user(prompt));
+
+    final assistantMessage = ChatMessage.assistant();
+    _messages.add(assistantMessage);
     notifyListeners();
 
-    _addLog('🔄 Procesando: "$prompt"');
+    _appendActivity(assistantMessage, '🔄 Procesando: "$prompt"');
 
     try {
-      // Procesar prompt con modelo - devuelve lista de acciones
       final actions = await _actionService.processPrompt(prompt);
-      _addLog('✅ Se detectaron ${actions.length} acción(es)');
-
-      // Mostrar acciones detectadas
+      _appendActivity(
+        assistantMessage,
+        '✅ Se detectaron ${actions.length} acción(es)',
+      );
       for (int i = 0; i < actions.length; i++) {
         final actionName = actions[i]['action'] ?? 'unknown';
-        _addLog('  ${i + 1}. $actionName');
+        _appendActivity(assistantMessage, '  ${i + 1}. $actionName');
       }
 
-      // Ejecutar todas las acciones
-      _addLog('🚀 Ejecutando secuencia de acciones...');
+      _appendActivity(assistantMessage, '🚀 Ejecutando secuencia de acciones...');
       final result = await _actionService.executeActions(actions);
 
-      _result = result;
-      _isProcessing = false;
-      _addLog('✅ Todas las acciones completadas');
-      notifyListeners();
+      assistantMessage.actions = actions;
+      assistantMessage.result = result;
+      assistantMessage.status = MessageStatus.success;
+      _appendActivity(assistantMessage, '✅ Todas las acciones completadas');
     } catch (e) {
-      _addLog('❌ Error: $e');
-      _isProcessing = false;
-      notifyListeners();
+      assistantMessage.status = MessageStatus.error;
+      _appendActivity(assistantMessage, '❌ Error: $e');
     }
-  }
 
-  void _addLog(String message) {
-    _logs = '$_logs\n$message';
-  }
-
-  void clearResult() {
-    _result = null;
     notifyListeners();
   }
 
-  void clearLogs() {
-    _logs = '';
+  void _appendActivity(ChatMessage message, String line) {
+    message.activityLog.add(line);
+    notifyListeners();
+  }
+
+  void clearMessages() {
+    _messages.clear();
     notifyListeners();
   }
 

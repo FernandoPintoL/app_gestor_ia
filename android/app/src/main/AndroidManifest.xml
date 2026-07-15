@@ -43,6 +43,11 @@
         </intent>
     </queries>
 
+    <!-- La app llama al backend por HTTP (ApiService) y descarga el modelo Whisper
+         de Hugging Face, así que necesita INTERNET en TODOS los build types,
+         no solo debug/profile (esos ya lo declaran para las herramientas de Flutter). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Permisos para Whisper (grabación de audio) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />

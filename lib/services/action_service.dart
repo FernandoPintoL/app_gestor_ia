@@ -4,6 +4,17 @@ import 'dart:convert';
 import 'dart:io';
 import 'api_service.dart';
 
+// DEV NOTE: llamadart's native backend spawns a background Isolate to load
+// the .gguf model (see llama_cpp_backend.dart, NativeLlamaBackend._ensureIsolate).
+// That isolate is only freed by an explicit dispose() call (ActionService.dispose,
+// wired from AppStateProvider.dispose). Flutter hot restart ('R') re-runs main()
+// but does NOT kill background isolates from the previous run, so each hot
+// restart while a model is already loaded orphans the old isolate + its ~1GB
+// model in native memory and loads a new one on top, eventually freezing/
+// crashing the app (no exception, since the process just runs out of RAM).
+// This is not a bug in path resolution or the model itself — it only shows up
+// under hot restart. Use hot reload ('r') for UI-only changes; only use hot
+// restart (or a full stop + relaunch) when the change actually requires it.
 class ActionService {
   static final ActionService _instance = ActionService._internal();
   late LlamaEngine _engine;
@@ -319,13 +330,9 @@ class ActionService {
 
         case 'create_client':
           final name = data?['name'] as String?;
-          final ci = data?['ci'] as String?;
 
           if (name == null || name.isEmpty) {
             throw Exception('Acción ${i + 1} (create_client): "name" es requerido');
-          }
-          if (ci == null || ci.isEmpty) {
-            throw Exception('Acción ${i + 1} (create_client): "ci" es requerido');
           }
           break;
 
@@ -390,6 +397,17 @@ RESPONSE FORMAT:
 ⚠️ NEVER return multiple JSON objects - use "actions" array!
 ⚠️ NEVER have empty string values in required fields!
 
+═══════════════════════════════════════════════════════════════════
+🔴 CRITICAL: CREATE vs LIST — DO NOT CONFUSE THEM
+═══════════════════════════════════════════════════════════════════
+"registra", "crea", "añade", "agrega", "nuevo/a" + a NAME to save → CREATE action
+"lista", "muestra", "dame", "cuáles son" (no new data given) → LIST action
+
+⚠️ If the user gives a NEW NAME/DATA to save (e.g. "registra el cliente Roberto"),
+it is ALWAYS create_client (or create_supplier/create_product/etc), NEVER list_*.
+❌ WRONG: "registra el cliente Roberto" → list_clients (WRONG, this ignores the new client!)
+✅ RIGHT: "registra el cliente Roberto" → create_client
+
 AVAILABLE ACTIONS:
 - create_sale: Create a new sale
 - list_sales: List all sales
@@ -416,7 +434,7 @@ For MULTIPLE actions (ALL in ONE array):
 
 REQUIRED FIELDS (must NEVER be empty):
 - CREATE_PRODUCT: nombre, categoria
-- CREATE_CLIENT: name, ci
+- CREATE_CLIENT: name (ci is OPTIONAL — only include it if the user gave one)
 - CREATE_SALE: client_name (or client_id), items
 - CREATE_SUPPLIER: name
 - CREATE_USER: name, usernick, password
@@ -438,12 +456,13 @@ For CREATE_PRODUCT:
 
 For CREATE_SALE:
   - client_id or client_name (required): Use existing client
-  - items (required): array of {product_id or product_name, quantity, unit_price (required)}
+  - items (required): array of {product_name (or product_id), quantity, unit_price (required)}
+    ⚠️ Use "product_name", NEVER "product_id_or_name" (that field name is EXCLUSIVE to UPDATE_STOCK)
   - observations (optional): Notes
 
 For CREATE_CLIENT:
   - name (required): Full name
-  - ci (required): ID/Cédula number
+  - ci (optional): ID/Cédula number — only include this key if the user explicitly gave one
   - phone (optional): Phone number
 
 For CREATE_SUPPLIER:
@@ -454,7 +473,8 @@ For CREATE_SUPPLIER:
 
 For CREATE_PURCHASE:
   - supplier_id or supplier_name (required): Existing supplier
-  - items (required): array of {product_id or product_name, quantity, unit_price (required)}
+  - items (required): array of {product_name (or product_id), quantity, unit_price (required)}
+    ⚠️ Use "product_name", NEVER "product_id_or_name" (that field name is EXCLUSIVE to UPDATE_STOCK)
   - observations (optional): Notes
 
 For CREATE_USER:
@@ -511,11 +531,39 @@ Example 8 - UPDATE STOCK (set/replace):
 INPUT: "establecer stock zapato a 50"
 OUTPUT: {"action": "update_stock", "data": {"product_id_or_name": "zapato", "quantity_update": 50, "type": "set"}}
 
+Example 9 - CREATE CLIENT (not list_clients!):
+INPUT: "registra el cliente Roberto con ci 5589211"
+OUTPUT: {"action": "create_client", "data": {"name": "Roberto", "ci": "5589211"}}
+
+Example 10 - CREATE SUPPLIER (not list_suppliers!):
+INPUT: "registra el proveedor fernando"
+OUTPUT: {"action": "create_supplier", "data": {"name": "fernando"}}
+
+Example 11 - CREATE PURCHASE (note "product_name", not "product_id_or_name"):
+INPUT: "crea una compra de 60 cascos al proveedor fernando a precio de compra 45"
+OUTPUT: {"action": "create_purchase", "data": {"supplier_name": "fernando", "items": [{"product_name": "casco", "quantity": 60, "unit_price": 45}]}}
+
+Example 12 - CREATE SALE (note "product_name", not "product_id_or_name"):
+INPUT: "registra una venta de 15 cascos al cliente roberto a precio 80"
+OUTPUT: {"action": "create_sale", "data": {"client_name": "roberto", "items": [{"product_name": "casco", "quantity": 15, "unit_price": 80}]}}
+
+Example 13 - LONG CHAIN mixing product+supplier+purchase+client+sale (5 actions):
+INPUT: "registra el producto casco con precio de venta 80, registra el proveedor fernando, crea una compra de 60 unidades para este producto y proveedor con precio de compra 45, registra el cliente Roberto con ci 1234567 y para este mismo producto y cliente nuevo registra una venta de 15 unidades"
+OUTPUT: {"actions": [
+  {"action": "create_product", "data": {"name": "casco", "categoria": "Calzado", "precio_venta": 80}},
+  {"action": "create_supplier", "data": {"name": "fernando"}},
+  {"action": "create_purchase", "data": {"supplier_name": "fernando", "items": [{"product_name": "casco", "quantity": 60, "unit_price": 45}]}},
+  {"action": "create_client", "data": {"name": "Roberto", "ci": "1234567"}},
+  {"action": "create_sale", "data": {"client_name": "Roberto", "items": [{"product_name": "casco", "quantity": 15, "unit_price": 80}]}}
+]}
+
 ═══════════════════════════════════════════════════════════════════
 
 ⚡ FINAL CHECK:
 ☑️ Count all items (search for "y", "además", commas)
 ☑️ 2+ items → Use "actions" array
+☑️ "registra/crea/nuevo" + name/data → create_*, NEVER list_*
+☑️ items in create_sale/create_purchase use "product_name", NEVER "product_id_or_name"
 ☑️ All required fields filled
 ☑️ categoria auto-inferred for products
 ☑️ No empty strings
