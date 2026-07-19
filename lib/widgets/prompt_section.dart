@@ -11,7 +11,7 @@ class PromptSection extends StatelessWidget {
   final TextEditingController promptController;
 
   const PromptSection({Key? key, required this.promptController})
-      : super(key: key);
+    : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -39,8 +39,8 @@ class PromptSection extends StatelessWidget {
                       hintText: whisper.isRecording
                           ? 'Escuchando...'
                           : modelProvider.isModelReady
-                              ? 'Escribe tu solicitud...'
-                              : 'Selecciona un modelo primero',
+                          ? 'Escribe tu solicitud...'
+                          : 'Selecciona un modelo primero',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
                         borderSide: BorderSide.none,
@@ -117,7 +117,7 @@ class _SendButton extends StatelessWidget {
                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
               ),
             )
-          : const Icon(Icons.send, color: Colors.white,),
+          : const Icon(Icons.send, color: Colors.white),
     );
   }
 }
@@ -136,7 +136,9 @@ class _MicButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final disabled =
-        !modelProvider.isModelReady || whisper.isTranscribing || appState.isProcessing;
+        !modelProvider.isModelReady ||
+        whisper.isTranscribing ||
+        appState.isProcessing;
 
     Color color;
     Widget icon;
@@ -158,7 +160,7 @@ class _MicButton extends StatelessWidget {
       icon = const Icon(Icons.stop);
     } else {
       color = Colors.blue;
-      icon = const Icon(Icons.mic, color: Colors.white,);
+      icon = const Icon(Icons.mic, color: Colors.white);
     }
 
     return FloatingActionButton(
@@ -168,8 +170,8 @@ class _MicButton extends StatelessWidget {
       onPressed: disabled
           ? null
           : whisper.isRecording
-              ? () => whisper.stopRecording()
-              : () => _startRecording(whisper),
+          ? () => whisper.stopRecording()
+          : () => _startRecording(whisper),
       child: icon,
     );
   }
@@ -182,7 +184,7 @@ class _MicButton extends StatelessWidget {
   Future<void> _startRecording(WhisperProvider whisper) async {
     if (!whisper.isModelReady) {
       try {
-        await whisper.initializeModel(WhisperModel.base);
+        await whisper.initializeModel(WhisperModel.medium);
       } catch (_) {
         return;
       }
