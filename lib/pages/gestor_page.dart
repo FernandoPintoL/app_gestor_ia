@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../providers/model_provider.dart';
 import '../providers/whisper_provider.dart';
+import '../providers/whisper_config_provider.dart';
 import '../providers/app_state_provider.dart';
 import '../widgets/status_bar.dart';
 import '../widgets/prompt_section.dart';
@@ -15,7 +16,7 @@ class GestorPage extends StatefulWidget {
   State<GestorPage> createState() => _GestorPageState();
 }
 
-class _GestorPageState extends State<GestorPage> {
+class _GestorPageState extends State<GestorPage> with WidgetsBindingObserver {
   late TextEditingController _promptController;
   late TextEditingController _modelPathController;
   late WhisperProvider _whisperProvider;
@@ -24,9 +25,15 @@ class _GestorPageState extends State<GestorPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     _promptController = TextEditingController();
     _modelPathController = TextEditingController();
     _whisperProvider = context.read<WhisperProvider>();
+
+    // Inyectar WhisperConfigProvider en WhisperProvider
+    final whisperConfigProvider = context.read<WhisperConfigProvider>();
+    _whisperProvider.setConfigProvider(whisperConfigProvider);
 
     // Cargar Qwen desde assets/saved path. Whisper NO se carga aquí: es un
     // segundo modelo (~140MB) que compite por RAM con Qwen (~1GB), así que
@@ -34,7 +41,9 @@ class _GestorPageState extends State<GestorPage> {
     // PromptSection/_MicButton) para no duplicar el pico de memoria en cada
     // arranque de la app.
     Future.microtask(() {
-      context.read<ModelProvider>().checkSavedModel();
+      if (mounted) {
+        context.read<ModelProvider>().checkSavedModel();
+      }
     });
 
     // Escuchar cambios en WhisperProvider para auto-llenar el prompt
@@ -49,7 +58,70 @@ class _GestorPageState extends State<GestorPage> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.paused:
+        // App entra a segundo plano
+        debugPrint('🔴 App pausada - Preparando limpieza de modelos');
+        break;
+      case AppLifecycleState.resumed:
+        // App vuelve al frente
+        debugPrint('🟢 App reanudada');
+        break;
+      case AppLifecycleState.inactive:
+        debugPrint('⚪ App inactiva');
+        break;
+      case AppLifecycleState.detached:
+        // App está siendo cerrada
+        debugPrint('⚫ App detached - Limpiando recursos');
+        break;
+      case AppLifecycleState.hidden:
+        debugPrint('App hidden');
+        break;
+    }
+  }
+
+  Future<void> _cleanupModels() async {
+    final shouldClean = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Limpiar Modelos'),
+        content: const Text(
+          'Esto descargará los modelos de memoria.\n\n'
+          'Deberás recargarlos cuando los uses de nuevo.\n\n'
+          '¿Deseas continuar?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Limpiar'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldClean == true && mounted) {
+      await context.read<WhisperProvider>().unloadModel();
+      await context.read<ModelProvider>().unloadModel();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Modelos limpiados. RAM liberada.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _whisperProvider.removeListener(_onWhisperTranscriptionChanged);
     _promptController.dispose();
     _modelPathController.dispose();
@@ -93,6 +165,15 @@ class _GestorPageState extends State<GestorPage> {
       appBar: AppBar(
         title: const Text('Gestor de Ventas IA'),
         elevation: 2,
+        actions: [
+          Tooltip(
+            message: 'Limpiar modelos de memoria',
+            child: IconButton(
+              onPressed: _cleanupModels,
+              icon: const Icon(Icons.cleaning_services),
+            ),
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(44),
           child: CompactStatusBar(

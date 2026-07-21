@@ -263,7 +263,7 @@ class ActionService {
           final users = await _apiService.getUsers();
           return {'users': users};
 
-        // STOCK
+        // STOCK & INVENTORY
         case 'update_stock':
           final productIdOrName = data?['product_id_or_name'] as String?;
           final quantityUpdate = data?['quantity_update'] as int?;
@@ -291,6 +291,51 @@ class ActionService {
               type: type,
             );
           }
+
+        case 'list_adjustments':
+          // GET /inventario/ajustes - Listar ajustes de inventario
+          final adjustments = await _apiService.listAdjustments();
+          return {'adjustments': adjustments};
+
+        case 'create_adjustment':
+          // POST /inventario/ajustes - Crear ajuste de inventario
+          return await _apiService.createAdjustment(data ?? {});
+
+        case 'list_transfers':
+          // GET /inventario/transferencias - Listar transferencias
+          final transfers = await _apiService.listTransfers();
+          return {'transfers': transfers};
+
+        case 'create_transfer':
+          // POST /inventario/transferencias - Crear transferencia
+          return await _apiService.createTransfer(data ?? {});
+
+        case 'list_stock':
+          // GET /inventario/stock/empresa - Listar stock por empresa
+          final stock = await _apiService.listStockByCompany();
+          return {'stock': stock};
+
+        case 'list_warehouses':
+          // GET /inventario/almacenes - Listar almacenes
+          final warehouses = await _apiService.listWarehouses();
+          return {'warehouses': warehouses};
+
+        case 'complete_transfer':
+          // PUT /inventario/transferencias/:id/completar
+          final transferId = data?['transfer_id'] as int?;
+          if (transferId == null) {
+            throw Exception('transfer_id es requerido');
+          }
+          return await _apiService.completeTransfer(transferId);
+
+        case 'cancel_transfer':
+          // PUT /inventario/transferencias/:id/cancelar
+          final transferId = data?['transfer_id'] as int?;
+          final observations = data?['observations'] as String?;
+          if (transferId == null) {
+            throw Exception('transfer_id es requerido');
+          }
+          return await _apiService.cancelTransfer(transferId, observations: observations);
 
         default:
           throw Exception('Acción desconocida: $action');
@@ -371,6 +416,59 @@ class ActionService {
             throw Exception('Acción ${i + 1} (update_stock): "quantity_update" es requerido');
           }
           break;
+
+        case 'create_adjustment':
+          final warehouseId = data?['warehouse_id'];
+          final productIdOrName = data?['product_id_or_name'] as String?;
+          final type = data?['type'] as String?;
+          final quantity = data?['quantity'];
+          final reason = data?['reason'] as String?;
+
+          if (warehouseId == null) {
+            throw Exception('Acción ${i + 1} (create_adjustment): "warehouse_id" es requerido');
+          }
+          if (productIdOrName == null || productIdOrName.isEmpty) {
+            throw Exception('Acción ${i + 1} (create_adjustment): "product_id_or_name" es requerido');
+          }
+          if (type == null || type.isEmpty) {
+            throw Exception('Acción ${i + 1} (create_adjustment): "type" es requerido (ENTRADA o SALIDA)');
+          }
+          if (quantity == null) {
+            throw Exception('Acción ${i + 1} (create_adjustment): "quantity" es requerido');
+          }
+          if (reason == null || reason.isEmpty) {
+            throw Exception('Acción ${i + 1} (create_adjustment): "reason" es requerido');
+          }
+          break;
+
+        case 'create_transfer':
+          final fromWarehouseId = data?['from_warehouse_id'];
+          final toWarehouseId = data?['to_warehouse_id'];
+          final productIdOrName = data?['product_id_or_name'] as String?;
+          final quantity = data?['quantity'];
+
+          if (fromWarehouseId == null) {
+            throw Exception('Acción ${i + 1} (create_transfer): "from_warehouse_id" es requerido');
+          }
+          if (toWarehouseId == null) {
+            throw Exception('Acción ${i + 1} (create_transfer): "to_warehouse_id" es requerido');
+          }
+          if (productIdOrName == null || productIdOrName.isEmpty) {
+            throw Exception('Acción ${i + 1} (create_transfer): "product_id_or_name" es requerido');
+          }
+          if (quantity == null) {
+            throw Exception('Acción ${i + 1} (create_transfer): "quantity" es requerido');
+          }
+          break;
+
+        case 'complete_transfer':
+        case 'cancel_transfer':
+          final transferId = data?['transfer_id'];
+
+          if (transferId == null) {
+            throw Exception('Acción ${i + 1} ($action): "transfer_id" es requerido');
+          }
+          break;
       }
     }
   }
@@ -422,6 +520,14 @@ AVAILABLE ACTIONS:
 - create_user: Create a new user
 - list_users: List all users
 - update_stock: Update product stock/inventory
+- list_adjustments: List stock adjustments (entries/exits)
+- create_adjustment: Create a manual stock adjustment
+- list_transfers: List warehouse transfers
+- create_transfer: Create a transfer between warehouses
+- complete_transfer: Mark a transfer as completed
+- cancel_transfer: Cancel a warehouse transfer
+- list_stock: List all stock by company
+- list_warehouses: List all warehouses
 
 RESPONSE FORMAT (RETURN ONLY ONE JSON BLOCK):
 For SINGLE action:
@@ -490,6 +596,26 @@ For UPDATE_STOCK:
     Default: 'increment'
   - observation (optional): Notes about the update
 
+For CREATE_ADJUSTMENT:
+  - warehouse_id (required): ID of warehouse
+  - product_id_or_name (required): Product ID or name
+  - type (required): 'ENTRADA' (income) or 'SALIDA' (exit)
+  - quantity (required): Quantity adjusted
+  - reason (required): Reason for adjustment (e.g., "merma", "diferencia", "inventario")
+
+For CREATE_TRANSFER:
+  - from_warehouse_id (required): Source warehouse ID
+  - to_warehouse_id (required): Destination warehouse ID
+  - product_id_or_name (required): Product ID or name
+  - quantity (required): Quantity to transfer
+
+For COMPLETE_TRANSFER:
+  - transfer_id (required): ID of the transfer to complete
+
+For CANCEL_TRANSFER:
+  - transfer_id (required): ID of the transfer to cancel
+  - observations (optional): Reason for cancellation
+
 For LIST actions: Return empty data object: {}
 
 ═══════════════════════════════════════════════════════════════════
@@ -556,6 +682,26 @@ OUTPUT: {"actions": [
   {"action": "create_client", "data": {"name": "Roberto", "ci": "1234567"}},
   {"action": "create_sale", "data": {"client_name": "Roberto", "items": [{"product_name": "casco", "quantity": 15, "unit_price": 80}]}}
 ]}
+
+Example 14 - INVENTORY ADJUSTMENT (single):
+INPUT: "crear un ajuste de entrada de 50 zapatos por merma"
+OUTPUT: {"action": "create_adjustment", "data": {"warehouse_id": 1, "product_id_or_name": "zapatos", "type": "ENTRADA", "quantity": 50, "reason": "merma"}}
+
+Example 15 - WAREHOUSE TRANSFER (single):
+INPUT: "transferir 20 cascos del almacén 1 al almacén 2"
+OUTPUT: {"action": "create_transfer", "data": {"from_warehouse_id": 1, "to_warehouse_id": 2, "product_id_or_name": "cascos", "quantity": 20}}
+
+Example 16 - COMPLETE TRANSFER:
+INPUT: "completar transferencia 5"
+OUTPUT: {"action": "complete_transfer", "data": {"transfer_id": 5}}
+
+Example 17 - CANCEL TRANSFER:
+INPUT: "cancelar transferencia 5 porque cambió de planes"
+OUTPUT: {"action": "cancel_transfer", "data": {"transfer_id": 5, "observations": "porque cambió de planes"}}
+
+Example 18 - INVENTORY LIST OPERATIONS (multiple):
+INPUT: "listar almacenes y ajustes de inventario"
+OUTPUT: {"actions": [{"action": "list_warehouses", "data": {}}, {"action": "list_adjustments", "data": {}}]}
 
 ═══════════════════════════════════════════════════════════════════
 

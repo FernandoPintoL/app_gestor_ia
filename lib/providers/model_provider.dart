@@ -41,6 +41,22 @@ class ModelProvider extends ChangeNotifier {
   }
 
   Future<void> loadModel(String modelPath) async {
+    // Validar si el mismo modelo ya está cargado
+    if (_isModelReady && _modelPath == modelPath) {
+      _modelLoadError = null;
+      _addLog('⚠️ Este modelo ya está cargado');
+      notifyListeners();
+      return;
+    }
+
+    // Validar si ya está cargando
+    if (_isModelLoading) {
+      _modelLoadError = 'Ya hay una carga en progreso';
+      _addLog('⚠️ $_modelLoadError');
+      notifyListeners();
+      return;
+    }
+
     _isModelLoading = true;
     _modelLoadError = null;
     _logs = '';
@@ -48,12 +64,13 @@ class ModelProvider extends ChangeNotifier {
     notifyListeners();
 
     _addLog('⏳ Cargando modelo...');
+    _addLog('📁 Ruta: $modelPath');
 
     try {
       await _actionService.initialize(modelPath);
       _isModelReady = true;
       _isModelLoading = false;
-      _addLog('✅ Modelo cargado');
+      _addLog('✅ Modelo cargado exitosamente');
       notifyListeners();
     } catch (e) {
       _modelLoadError = 'Error: $e';
@@ -74,6 +91,25 @@ class ModelProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> unloadModel() async {
+    _addLog('🧹 Limpiando modelo Qwen...');
+    _isModelReady = false;
+    _modelPath = null;
+    _modelLoadError = null;
+    _addLog('✅ Modelo descargado de memoria');
+    notifyListeners();
+  }
+
+  void clearAll() {
+    _isModelLoading = false;
+    _isModelReady = false;
+    _modelPath = null;
+    _modelLoadError = null;
+    _logs = '';
+    notifyListeners();
+  }
+
+  @override
   void dispose() {
     _actionService.dispose();
     super.dispose();

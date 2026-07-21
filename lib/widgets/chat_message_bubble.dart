@@ -249,12 +249,24 @@ class _CompletedContent extends StatelessWidget {
         return '✅ Compra registrada${data['supplier_name'] != null ? ' a ${data['supplier_name']}' : ''}';
       case 'update_stock':
         return '✅ Stock de "${data['product_id_or_name'] ?? '?'}" actualizado (${data['quantity_update'] ?? '?'})';
+      case 'create_adjustment':
+        return '✅ Ajuste de inventario registrado (${data['quantity'] ?? '?'} ${data['type'] ?? '?'})';
+      case 'create_transfer':
+        return '✅ Transferencia creada: ${data['quantity'] ?? '?'} ${data['product_id_or_name'] ?? '?'}';
+      case 'complete_transfer':
+        return '✅ Transferencia ${data['transfer_id'] ?? '?'} completada';
+      case 'cancel_transfer':
+        return '✅ Transferencia ${data['transfer_id'] ?? '?'} cancelada';
       case 'list_products':
       case 'list_clients':
       case 'list_suppliers':
       case 'list_purchases':
       case 'list_sales':
       case 'list_users':
+      case 'list_adjustments':
+      case 'list_transfers':
+      case 'list_stock':
+      case 'list_warehouses':
         final count = _countItems(actionResult);
         final label = _listLabel(action);
         return '📋 $count $label encontrado(s)';
@@ -285,6 +297,14 @@ class _CompletedContent extends StatelessWidget {
         return 'venta(s)';
       case 'list_users':
         return 'usuario(s)';
+      case 'list_adjustments':
+        return 'ajuste(s) de inventario';
+      case 'list_transfers':
+        return 'transferencia(s)';
+      case 'list_stock':
+        return 'artículo(s) de stock';
+      case 'list_warehouses':
+        return 'almacén(es)';
       default:
         return 'resultado(s)';
     }

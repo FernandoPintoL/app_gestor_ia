@@ -282,4 +282,50 @@ class ApiService {
       throw Exception('Producto "$productName" no encontrado: $e');
     }
   }
+
+  // Inventory Management
+  Future<List<dynamic>> listAdjustments() async {
+    final r = await request('GET', '/inventario/ajustes');
+    final data = r is Map
+      ? (r['data'] is Map ? r['data']['adjustments'] ?? [] : r['data'] ?? [])
+      : r;
+    return List<dynamic>.from(data is List ? data : []);
+  }
+
+  Future<dynamic> createAdjustment(Map<String, dynamic> data) =>
+    request('POST', '/inventario/ajustes', body: data);
+
+  Future<List<dynamic>> listTransfers() async {
+    final r = await request('GET', '/inventario/transferencias');
+    final data = r is Map
+      ? (r['data'] is Map ? r['data']['transfers'] ?? [] : r['data'] ?? [])
+      : r;
+    return List<dynamic>.from(data is List ? data : []);
+  }
+
+  Future<dynamic> createTransfer(Map<String, dynamic> data) =>
+    request('POST', '/inventario/transferencias', body: data);
+
+  Future<List<dynamic>> listStockByCompany() async {
+    final r = await request('GET', '/inventario/stock/empresa');
+    final data = r is Map
+      ? (r['data'] is Map ? r['data']['stock'] ?? [] : r['data'] ?? [])
+      : r;
+    return List<dynamic>.from(data is List ? data : []);
+  }
+
+  Future<List<dynamic>> listWarehouses() async {
+    final r = await request('GET', '/inventario/almacenes');
+    final data = r is Map
+      ? (r['data'] is List ? r['data'] : (r['data'] is Map ? r['data']['warehouses'] ?? [] : []))
+      : r;
+    return List<dynamic>.from(data is List ? data : []);
+  }
+
+  Future<dynamic> completeTransfer(int transferId) =>
+    request('PUT', '/inventario/transferencias/$transferId/completar', body: {});
+
+  Future<dynamic> cancelTransfer(int transferId, {String? observations}) =>
+    request('PUT', '/inventario/transferencias/$transferId/cancelar',
+      body: {'observations': observations});
 }
